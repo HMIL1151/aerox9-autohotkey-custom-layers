@@ -40,6 +40,20 @@ global PickTypeDDL := ""
 global PickKeyDDL := ""
 global PickFreeTextEdit := ""
 
+global ThumbnailCacheDir := A_ScriptDir "\ThumbnailCache"
+global OverlayBackColour := "202020"
+
+; ----------------------------------------------------------
+; Overlay position  (pixels from top-left of primary screen)
+; ----------------------------------------------------------
+global OverlayX := A_ScreenWidth - 500   ; distance from left edge
+global OverlayY := 80                    ; distance from top edge
+
+; ----------------------------------------------------------
+; CPI long-press threshold (milliseconds)
+; ----------------------------------------------------------
+global CpiLongPressMs := 250
+
 ; ----------------------------------------------------------
 ; Start-up
 ; ----------------------------------------------------------
@@ -107,8 +121,8 @@ CpiDown() {
     CpiLongPressActive := false
     CpiDownTick := A_TickCount
 
-    ; After 1 second, check if CPI is still held
-    SetTimer(CheckCpiLongPress, -1000)
+    ; After CpiLongPressMs, check if CPI is still held
+    SetTimer(CheckCpiLongPress, -CpiLongPressMs)
 }
 
 CheckCpiLongPress() {
@@ -134,7 +148,7 @@ CpiUp() {
     heldMs := A_TickCount - CpiDownTick
     CpiIsDown := false
 
-    if CpiLongPressActive || heldMs >= 1000 {
+    if CpiLongPressActive || heldMs >= CpiLongPressMs {
         ; Long press:
         ; Do not switch layer.
         ; Do not rebuild overlay because that causes a visible flash.
@@ -221,6 +235,10 @@ ExecuteActionDown(action) {
             if value != "" {
                 Run(value)
             }
+        
+        case "lock":
+            DllCall("LockWorkStation")
+
 
         case "none":
             return
@@ -292,44 +310,64 @@ HoldUpString(value) {
 ShowOverlay() {
     global OverlayGui, Layers, CurrentLayer, OverlayHoldMode
 
-    if IsObject(OverlayGui) {
-        try OverlayGui.Destroy()
-    }
-
     layer := Layers[CurrentLayer]
 
-    OverlayGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20")
-    OverlayGui.BackColor := "202020"
-    OverlayGui.MarginX := 14
-    OverlayGui.MarginY := 12
-
-    ; Header row
+    ; Prepare thumbnail before creating/replacing the GUI.
+    ; This avoids old fade timers destroying the GUI while thumbnail processing is happening.
     thumbnailPath := ""
 
     try {
         thumbnailPath := layer.Thumbnail
     }
 
+    displayThumbnail := ""
+
     if thumbnailPath != "" && FileExist(thumbnailPath) {
-        OverlayGui.AddPicture("xm ym w54 h54", thumbnailPath)
-
-        OverlayGui.SetFont("s14 cFFFFFF Bold", "Segoe UI")
-        OverlayGui.AddText("x+10 yp+2 w220", layer.Name)
-
-        OverlayGui.SetFont("s8 cAFAFAF", "Segoe UI")
-        OverlayGui.AddText("xp y+2 w220", "Hold CPI to keep this open")
-    } else {
-        OverlayGui.SetFont("s14 cFFFFFF Bold", "Segoe UI")
-        OverlayGui.AddText("xm ym w280", layer.Name)
-
-        OverlayGui.SetFont("s8 cAFAFAF", "Segoe UI")
-        OverlayGui.AddText("xm y+2 w280", "Hold CPI to keep this open")
+        displayThumbnail := PrepareThumbnailForOverlay(thumbnailPath, 54)
     }
 
-    OverlayGui.SetFont("s8 c808080", "Segoe UI")
-    OverlayGui.AddText("xm y+6 w280", "Edit layers: Ctrl + Alt + Shift + F11")
+    ; Destroy the previous overlay, if it still exists.
+    if IsObject(OverlayGui) {
+        try OverlayGui.Destroy()
+    }
 
-    OverlayGui.SetFont("s9 cFFFFFF", "Consolas")
+    ; IMPORTANT:
+    ; Do not name this variable "gui".
+    ; In AutoHotkey v2 that can shadow the built-in Gui() constructor.
+    newOverlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20")
+    newOverlay.BackColor := "202020"
+    newOverlay.MarginX := 14
+    newOverlay.MarginY := 12
+
+    if displayThumbnail != "" && FileExist(displayThumbnail) {
+        try {
+            newOverlay.Add("Picture", "xm ym w54 h54", displayThumbnail)
+
+            newOverlay.SetFont("s14 cFFFFFF Bold", "Segoe UI")
+            newOverlay.AddText("x+10 yp+2 w220", layer.Name)
+
+            newOverlay.SetFont("s8 cAFAFAF", "Segoe UI")
+            newOverlay.AddText("xp y+2 w220", "Hold CPI to keep this open")
+        } catch {
+            ; If image loading fails for any reason, fall back to text-only overlay.
+            newOverlay.SetFont("s14 cFFFFFF Bold", "Segoe UI")
+            newOverlay.AddText("xm ym w280", layer.Name)
+
+            newOverlay.SetFont("s8 cAFAFAF", "Segoe UI")
+            newOverlay.AddText("xm y+2 w280", "Hold CPI to keep this open")
+        }
+    } else {
+        newOverlay.SetFont("s14 cFFFFFF Bold", "Segoe UI")
+        newOverlay.AddText("xm ym w280", layer.Name)
+
+        newOverlay.SetFont("s8 cAFAFAF", "Segoe UI")
+        newOverlay.AddText("xm y+2 w280", "Hold CPI to keep this open")
+    }
+
+    newOverlay.SetFont("s8 c808080", "Segoe UI")
+    newOverlay.AddText("xm y+6 w280", "Edit layers: Ctrl + Alt + Shift + F11")
+
+    newOverlay.SetFont("s9 cFFFFFF", "Consolas")
 
     text := ""
 
@@ -340,34 +378,73 @@ ShowOverlay() {
         text .= buttonText ": " label "`n"
     }
 
-    OverlayGui.AddText("xm y+8 w280", text)
+    newOverlay.AddText("xm y+8 w280", text)
 
-    x := A_ScreenWidth - 340
-    y := 80
+    newOverlay.Show("x" OverlayX " y" OverlayY " NoActivate")
+    WinSetTransparent(235, "ahk_id " newOverlay.Hwnd)
 
-    OverlayGui.Show("x" x " y" y " NoActivate")
-    WinSetTransparent(235, "ahk_id " OverlayGui.Hwnd)
+    ; Now that the GUI is fully built and shown, make it the current overlay.
+    OverlayGui := newOverlay
 
     if !OverlayHoldMode {
-        SetTimer(() => FadeOverlay(OverlayGui), -2200)
+        overlayToFade := newOverlay
+        SetTimer(() => FadeOverlay(overlayToFade), -2200)
     }
 }
 
-FadeOverlay(guiObj) {
+FadeOverlay(overlayToFade) {
+    global OverlayGui
+
+    ; If this timer belongs to an older overlay, ignore it.
+    ; This prevents old fade timers from destroying a newer overlay.
+    if !IsObject(overlayToFade) {
+        return
+    }
+
+    if !IsObject(OverlayGui) {
+        return
+    }
+
+    try {
+        if overlayToFade.Hwnd != OverlayGui.Hwnd {
+            return
+        }
+    } catch {
+        return
+    }
+
     alpha := 235
 
     while alpha > 0 {
+        ; Stop fading if a newer overlay has replaced this one.
+        try {
+            if !IsObject(OverlayGui) || overlayToFade.Hwnd != OverlayGui.Hwnd {
+                return
+            }
+        } catch {
+            return
+        }
+
         alpha -= 15
+        if alpha < 0 {
+            alpha := 0
+        }
 
         try {
-            WinSetTransparent(alpha, "ahk_id " guiObj.Hwnd)
+            WinSetTransparent(alpha, "ahk_id " overlayToFade.Hwnd)
+        } catch {
+            return
         }
 
         Sleep(25)
     }
 
+    ; Only destroy if this is still the current overlay.
     try {
-        guiObj.Destroy()
+        if IsObject(OverlayGui) && overlayToFade.Hwnd = OverlayGui.Hwnd {
+            overlayToFade.Destroy()
+            OverlayGui := ""
+        }
     }
 }
 
@@ -853,6 +930,141 @@ GetSafeThumbnail(layer) {
 
     return ""
 }
+
+PrepareThumbnailForOverlay(sourcePath, size := 54) {
+    global ThumbnailCacheDir, OverlayBackColour
+
+    if sourcePath = "" || !FileExist(sourcePath) {
+        return ""
+    }
+
+    if !DirExist(ThumbnailCacheDir) {
+        DirCreate(ThumbnailCacheDir)
+    }
+
+    ; Include modified time in the cache name so the cache refreshes if the image changes.
+    modTime := ""
+
+    try {
+        modTime := FileGetTime(sourcePath, "M")
+    } catch {
+        modTime := A_Now
+    }
+
+    safeName := RegExReplace(sourcePath, "[^\w]", "_")
+    cachePath := ThumbnailCacheDir "\" safeName "_" modTime "_" size ".png"
+
+    if FileExist(cachePath) {
+        return cachePath
+    }
+
+    success := CreateFlattenedThumbnail(sourcePath, cachePath, size, OverlayBackColour)
+
+    if success && FileExist(cachePath) {
+        return cachePath
+    }
+
+    ; Fallback to the original image if thumbnail generation fails.
+    return sourcePath
+}
+
+CreateFlattenedThumbnail(sourcePath, outputPath, size, bgColour) {
+    psPath := A_Temp "\Aerox9_CreateThumbnail.ps1"
+
+    psLines := [
+        "param(",
+        "    [string]$Source,",
+        "    [string]$Output,",
+        "    [int]$Size,",
+        "    [string]$BackgroundHex",
+        ")",
+        "",
+        "Add-Type -AssemblyName System.Drawing",
+        "",
+        "$src = [System.Drawing.Image]::FromFile($Source)",
+        "",
+        "try {",
+        "    $bmp = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)",
+        "    $g = [System.Drawing.Graphics]::FromImage($bmp)",
+        "",
+        "    try {",
+        "        $bg = [System.Drawing.ColorTranslator]::FromHtml('#' + $BackgroundHex)",
+        "",
+        "        $g.Clear($bg)",
+        "        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic",
+        "        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality",
+        "        $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality",
+        "        $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality",
+        "",
+        "        $ratioX = $Size / $src.Width",
+        "        $ratioY = $Size / $src.Height",
+        "        $ratio = [Math]::Min($ratioX, $ratioY)",
+        "",
+        "        $newW = [int]($src.Width * $ratio)",
+        "        $newH = [int]($src.Height * $ratio)",
+        "",
+        "        $x = [int](($Size - $newW) / 2)",
+        "        $y = [int](($Size - $newH) / 2)",
+        "",
+        "        $g.DrawImage($src, $x, $y, $newW, $newH)",
+        "",
+        "        $bmp.Save($Output, [System.Drawing.Imaging.ImageFormat]::Png)",
+        "    }",
+        "    finally {",
+        "        if ($g -ne $null) {",
+        "            $g.Dispose()",
+        "        }",
+        "",
+        "        if ($bmp -ne $null) {",
+        "            $bmp.Dispose()",
+        "        }",
+        "    }",
+        "}",
+        "finally {",
+        "    if ($src -ne $null) {",
+        "        $src.Dispose()",
+        "    }",
+        "}"
+    ]
+
+    psScript := JoinLines(psLines)
+
+    try {
+        if FileExist(psPath) {
+            FileDelete(psPath)
+        }
+
+        FileAppend(psScript, psPath, "UTF-8")
+
+        command := "powershell.exe -NoProfile -ExecutionPolicy Bypass -File "
+            . QuoteArg(psPath)
+            . " -Source " . QuoteArg(sourcePath)
+            . " -Output " . QuoteArg(outputPath)
+            . " -Size " . size
+            . " -BackgroundHex " . QuoteArg(bgColour)
+
+        RunWait(command, , "Hide")
+
+        return FileExist(outputPath)
+    } catch as err {
+        return false
+    }
+}
+
+QuoteArg(value) {
+    return "`"" value "`""
+}
+
+JoinLines(lines) {
+    output := ""
+
+    for _, line in lines {
+        output .= line "`r`n"
+    }
+
+    return output
+}
+
 
 CreateDefaultLayers() {
     return [
