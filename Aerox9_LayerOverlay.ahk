@@ -26,6 +26,7 @@ global EditorGui := ""
 global LayerDropDown := ""
 global NameEdit := ""
 global ThumbnailEdit := ""
+global EnabledCheck := ""
 global LabelEdits := []
 global ActionEdits := []
 
@@ -174,10 +175,16 @@ CpiUp() {
 CycleLayer() {
     global CurrentLayer, Layers
 
-    CurrentLayer += 1
+    Loop Layers.Length {
+        CurrentLayer += 1
 
-    if CurrentLayer > Layers.Length {
-        CurrentLayer := 1
+        if CurrentLayer > Layers.Length {
+            CurrentLayer := 1
+        }
+
+        if Layers[CurrentLayer].Enabled {
+            break
+        }
     }
 
     ShowOverlay()
@@ -453,7 +460,7 @@ FadeOverlay(overlayToFade) {
 ; ----------------------------------------------------------
 
 OpenEditor() {
-    global EditorGui, LayerDropDown, NameEdit, ThumbnailEdit, LabelEdits, ActionEdits
+    global EditorGui, LayerDropDown, NameEdit, ThumbnailEdit, EnabledCheck, LabelEdits, ActionEdits
     global Layers, CurrentLayer
 
     if IsObject(EditorGui) {
@@ -479,6 +486,9 @@ OpenEditor() {
 
     EditorGui.AddText("xm y+18", "Layer name:")
     NameEdit := EditorGui.AddEdit("x+8 yp-3 w420", Layers[CurrentLayer].Name)
+
+    EnabledCheck := EditorGui.AddCheckbox("xm y+8", "Layer enabled (active in CPI cycle)")
+    EnabledCheck.Value := Layers[CurrentLayer].Enabled ? 1 : 0
 
     EditorGui.AddText("xm y+12", "Thumbnail:")
     ThumbnailEdit := EditorGui.AddEdit("x+8 yp-3 w420", GetLayerThumbnail(CurrentLayer))
@@ -537,6 +547,7 @@ SaveFromEditor(showMessage := true) {
     }
 
     Layers[CurrentLayer].Name := NameEdit.Value
+    Layers[CurrentLayer].Enabled := EnabledCheck.Value = 1
     Layers[CurrentLayer].Thumbnail := ThumbnailEdit.Value
 
     Loop 12 {
@@ -877,6 +888,7 @@ LoadConfig() {
         section := "Layer" A_Index
         name := IniRead(ConfigFile, section, "Name", "Layer " A_Index)
         thumbnail := IniRead(ConfigFile, section, "Thumbnail", "")
+        enabled := IniRead(ConfigFile, section, "Enabled", "1")
 
         labels := []
         actions := []
@@ -892,6 +904,7 @@ LoadConfig() {
         Layers.Push({
             Name: name,
             Thumbnail: thumbnail,
+            Enabled: (enabled != "0"),
             Labels: labels,
             Actions: actions
         })
@@ -912,6 +925,7 @@ SaveConfig() {
 
         IniWrite(layer.Name, ConfigFile, section, "Name")
         IniWrite(GetSafeThumbnail(layer), ConfigFile, section, "Thumbnail")
+        IniWrite(layer.Enabled ? "1" : "0", ConfigFile, section, "Enabled")
 
         Loop 12 {
             labelKey := "Button" A_Index "Label"
@@ -1071,6 +1085,7 @@ CreateDefaultLayers() {
         {
             Name: "Default / Windows",
             Thumbnail: "",
+            Enabled: true,
             Labels: [
                 "Copy",
                 "Paste",
@@ -1103,6 +1118,7 @@ CreateDefaultLayers() {
         {
             Name: "Autodesk Inventor",
             Thumbnail: "",
+            Enabled: true,
             Labels: [
                 "Orbit",
                 "Pan",
@@ -1135,6 +1151,7 @@ CreateDefaultLayers() {
         {
             Name: "VS Code",
             Thumbnail: "",
+            Enabled: true,
             Labels: [
                 "Command Pal",
                 "Quick Open",
@@ -1171,6 +1188,7 @@ CreateBlankLayer(name) {
     return {
         Name: name,
         Thumbnail: "",
+        Enabled: true,
         Labels: [
             "Button 1",
             "Button 2",
