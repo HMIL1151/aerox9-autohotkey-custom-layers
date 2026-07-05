@@ -96,6 +96,7 @@ If F13–F24 do not work reliably, you can instead use unusual key combinations 
 | CPI hold for more than 1 second | Hold the overlay on screen without changing layer |
 | Release CPI after long hold | Fade the overlay away |
 | `Ctrl + Alt + Shift + F11` | Open the layer editor |
+| `Ctrl + Alt + Shift + F10` | Reload the script (fast edit/test loop) |
 | Side buttons 1–12 | Run the configured action for the active layer |
 | Wheel tilt left | Run layer wheel-tilt-left action (default `tap:^z`) |
 | Wheel tilt right | Run layer wheel-tilt-right action (default `tap:^y`) |
@@ -131,6 +132,19 @@ Ctrl + Alt + Shift + F11
 ```
 
 The editor allows you to configure layers without editing the `.ini` file manually.
+
+---
+
+## Faster Iteration Workflow
+
+For day-to-day editing/testing, use this loop:
+
+1. Keep the script running.
+2. Save your changes in VS Code.
+3. Press `Ctrl + Alt + Shift + F10` to reload instantly.
+4. Re-test on the mouse.
+
+The script now self-elevates on launch if it is not already running as administrator, so you can usually launch it normally and accept UAC once.
 
 ---
 

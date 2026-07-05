@@ -1,6 +1,8 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
+EnsureAdmin()
+
 ; ==========================================================
 ; Aerox 9 Layer Manager - AutoHotkey v2
 ;
@@ -10,6 +12,8 @@
 ;
 ; Editor hotkey:
 ; Ctrl + Alt + Shift + F11
+; Reload script hotkey:
+; Ctrl + Alt + Shift + F10
 ;
 ; Behaviour:
 ; CPI short press       -> switch layer on release
@@ -71,6 +75,9 @@ ShowOverlay()
 ; Open editor
 ^!+F11::OpenEditor()
 
+; Reload script (quick iteration while editing)
+^!+F10::ReloadScript()
+
 ; Side button down/up mappings
 F13::ButtonDown(1)
 F13 Up::ButtonUp(1)
@@ -130,6 +137,34 @@ CpiDown() {
 
     ; After CpiLongPressMs, check if CPI is still held
     SetTimer(CheckCpiLongPress, -CpiLongPressMs)
+}
+
+EnsureAdmin() {
+    if A_IsAdmin {
+        return
+    }
+
+    try {
+        if A_IsCompiled {
+            Run('*RunAs "' A_ScriptFullPath '"')
+        } else {
+            Run('*RunAs "' A_AhkPath '" "' A_ScriptFullPath '"')
+        }
+
+        ExitApp()
+    } catch {
+        MsgBox("This script should run as administrator for reliable input handling.")
+    }
+}
+
+ReloadScript() {
+    try {
+        Reload()
+    } catch {
+        ; Fallback if reload fails for any reason.
+        Run('*RunAs "' A_AhkPath '" "' A_ScriptFullPath '"')
+        ExitApp()
+    }
 }
 
 CheckCpiLongPress() {
