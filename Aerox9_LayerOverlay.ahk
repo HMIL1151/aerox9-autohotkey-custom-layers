@@ -27,6 +27,8 @@ global LayerDropDown := ""
 global NameEdit := ""
 global ThumbnailEdit := ""
 global EnabledCheck := ""
+global TiltLeftActionEdit := ""
+global TiltRightActionEdit := ""
 global LabelEdits := []
 global ActionEdits := []
 
@@ -105,6 +107,10 @@ F23 Up::ButtonUp(11)
 
 F24::ButtonDown(12)
 F24 Up::ButtonUp(12)
+
+; Wheel tilt left/right
+WheelLeft::WheelTilt("Left")
+WheelRight::WheelTilt("Right")
 
 ; ----------------------------------------------------------
 ; CPI handling
@@ -214,6 +220,24 @@ ButtonUp(buttonNumber) {
     ButtonPressed[buttonNumber] := false
 
     action := Layers[CurrentLayer].Actions[buttonNumber]
+    ExecuteActionUp(action)
+}
+
+WheelTilt(direction) {
+    global Layers, CurrentLayer
+
+    layer := Layers[CurrentLayer]
+    action := ""
+
+    if direction = "Left" {
+        action := layer.TiltLeftAction
+    } else {
+        action := layer.TiltRightAction
+    }
+
+    ; Wheel tilt does not provide a reliable up event in this workflow,
+    ; so execute down+up immediately to keep hold actions from sticking.
+    ExecuteActionDown(action)
     ExecuteActionUp(action)
 }
 
@@ -460,7 +484,7 @@ FadeOverlay(overlayToFade) {
 ; ----------------------------------------------------------
 
 OpenEditor() {
-    global EditorGui, LayerDropDown, NameEdit, ThumbnailEdit, EnabledCheck, LabelEdits, ActionEdits
+    global EditorGui, LayerDropDown, NameEdit, ThumbnailEdit, EnabledCheck, TiltLeftActionEdit, TiltRightActionEdit, LabelEdits, ActionEdits
     global Layers, CurrentLayer
 
     if IsObject(EditorGui) {
@@ -491,9 +515,16 @@ OpenEditor() {
     EnabledCheck.Value := Layers[CurrentLayer].Enabled ? 1 : 0
 
     EditorGui.AddText("xm y+12", "Thumbnail:")
-    ThumbnailEdit := EditorGui.AddEdit("x+8 yp-3 w420", GetLayerThumbnail(CurrentLayer))
+    ; Keep thumbnail path input single-line so following controls never overlap.
+    ThumbnailEdit := EditorGui.AddEdit("x+8 yp-3 w420 r1", GetLayerThumbnail(CurrentLayer))
     EditorGui.AddButton("x+8 yp-1 w80", "Browse...").OnEvent("Click", (*) => BrowseThumbnail())
     EditorGui.AddButton("x+8 yp w80", "Clear").OnEvent("Click", (*) => ClearThumbnail())
+
+    EditorGui.AddText("xm y+16", "Wheel tilt left action:")
+    TiltLeftActionEdit := EditorGui.AddEdit("x+8 yp-3 w420", GetLayerTiltLeftAction(CurrentLayer))
+
+    EditorGui.AddText("xm y+8", "Wheel tilt right action:")
+    TiltRightActionEdit := EditorGui.AddEdit("x+8 yp-3 w420", GetLayerTiltRightAction(CurrentLayer))
 
     EditorGui.AddText("xm y+18 w40", "Btn")
     EditorGui.AddText("x+8 yp w200", "Display label")
@@ -540,7 +571,7 @@ SelectLayerFromEditor() {
 }
 
 SaveFromEditor(showMessage := true) {
-    global Layers, CurrentLayer, NameEdit, ThumbnailEdit, LabelEdits, ActionEdits
+    global Layers, CurrentLayer, NameEdit, ThumbnailEdit, EnabledCheck, TiltLeftActionEdit, TiltRightActionEdit, LabelEdits, ActionEdits
 
     if !IsObject(NameEdit) {
         return
@@ -549,6 +580,8 @@ SaveFromEditor(showMessage := true) {
     Layers[CurrentLayer].Name := NameEdit.Value
     Layers[CurrentLayer].Enabled := EnabledCheck.Value = 1
     Layers[CurrentLayer].Thumbnail := ThumbnailEdit.Value
+    Layers[CurrentLayer].TiltLeftAction := TiltLeftActionEdit.Value
+    Layers[CurrentLayer].TiltRightAction := TiltRightActionEdit.Value
 
     Loop 12 {
         Layers[CurrentLayer].Labels[A_Index] := LabelEdits[A_Index].Value
@@ -861,6 +894,26 @@ GetLayerThumbnail(layerIndex) {
     return ""
 }
 
+GetLayerTiltLeftAction(layerIndex) {
+    global Layers
+
+    try {
+        return Layers[layerIndex].TiltLeftAction
+    }
+
+    return "tap:^z"
+}
+
+GetLayerTiltRightAction(layerIndex) {
+    global Layers
+
+    try {
+        return Layers[layerIndex].TiltRightAction
+    }
+
+    return "tap:^y"
+}
+
 ; ----------------------------------------------------------
 ; Config handling using INI
 ; ----------------------------------------------------------
@@ -889,6 +942,8 @@ LoadConfig() {
         name := IniRead(ConfigFile, section, "Name", "Layer " A_Index)
         thumbnail := IniRead(ConfigFile, section, "Thumbnail", "")
         enabled := IniRead(ConfigFile, section, "Enabled", "1")
+        tiltLeftAction := IniRead(ConfigFile, section, "TiltLeftAction", "tap:^z")
+        tiltRightAction := IniRead(ConfigFile, section, "TiltRightAction", "tap:^y")
 
         labels := []
         actions := []
@@ -905,6 +960,8 @@ LoadConfig() {
             Name: name,
             Thumbnail: NormalizeThumbnailFromConfig(thumbnail),
             Enabled: (enabled != "0"),
+            TiltLeftAction: tiltLeftAction,
+            TiltRightAction: tiltRightAction,
             Labels: labels,
             Actions: actions
         })
@@ -926,6 +983,8 @@ SaveConfig() {
         IniWrite(layer.Name, ConfigFile, section, "Name")
         IniWrite(GetSafeThumbnail(layer), ConfigFile, section, "Thumbnail")
         IniWrite(layer.Enabled ? "1" : "0", ConfigFile, section, "Enabled")
+        IniWrite(layer.TiltLeftAction, ConfigFile, section, "TiltLeftAction")
+        IniWrite(layer.TiltRightAction, ConfigFile, section, "TiltRightAction")
 
         Loop 12 {
             labelKey := "Button" A_Index "Label"
@@ -1179,6 +1238,8 @@ CreateDefaultLayers() {
             Name: "Default / Windows",
             Thumbnail: "",
             Enabled: true,
+            TiltLeftAction: "tap:^z",
+            TiltRightAction: "tap:^y",
             Labels: [
                 "Copy",
                 "Paste",
@@ -1212,6 +1273,8 @@ CreateDefaultLayers() {
             Name: "Autodesk Inventor",
             Thumbnail: "",
             Enabled: true,
+            TiltLeftAction: "tap:^z",
+            TiltRightAction: "tap:^y",
             Labels: [
                 "Orbit",
                 "Pan",
@@ -1245,6 +1308,8 @@ CreateDefaultLayers() {
             Name: "VS Code",
             Thumbnail: "",
             Enabled: true,
+            TiltLeftAction: "tap:^z",
+            TiltRightAction: "tap:^y",
             Labels: [
                 "Command Pal",
                 "Quick Open",
@@ -1282,6 +1347,8 @@ CreateBlankLayer(name) {
         Name: name,
         Thumbnail: "",
         Enabled: true,
+        TiltLeftAction: "tap:^z",
+        TiltRightAction: "tap:^y",
         Labels: [
             "Button 1",
             "Button 2",

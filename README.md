@@ -24,6 +24,7 @@ This was built as a Windows-side software layer rather than a firmware modificat
   - renaming layers
   - editing button labels
   - editing button actions
+  - editing wheel-tilt left and right actions per layer
   - linking thumbnail images to layers
 - Optional action picker to avoid remembering AutoHotkey key codes.
 - Support for tap actions, hold actions, text output, launching programs, and disabled buttons.
@@ -78,6 +79,8 @@ In SteelSeries GG, create a base Aerox 9 configuration and map the mouse control
 | Side button 10 | `F22` |
 | Side button 11 | `F23` |
 | Side button 12 | `F24` |
+| Wheel tilt left | `WheelLeft` (default mouse event) |
+| Wheel tilt right | `WheelRight` (default mouse event) |
 
 The script listens for these key outputs and converts them into layer-specific actions.
 
@@ -94,6 +97,8 @@ If F13–F24 do not work reliably, you can instead use unusual key combinations 
 | Release CPI after long hold | Fade the overlay away |
 | `Ctrl + Alt + Shift + F11` | Open the layer editor |
 | Side buttons 1–12 | Run the configured action for the active layer |
+| Wheel tilt left | Run layer wheel-tilt-left action (default `tap:^z`) |
+| Wheel tilt right | Run layer wheel-tilt-right action (default `tap:^y`) |
 
 ---
 
@@ -146,7 +151,8 @@ The editor allows you to configure layers without editing the `.ini` file manual
 1. Open the editor with `Ctrl + Alt + Shift + F11`.
 2. Select the layer from the dropdown.
 3. Change the layer name, thumbnail, labels, or actions.
-4. Select **Save** or **Save & Close**.
+4. Optionally set wheel-tilt left/right actions for the layer.
+5. Select **Save** or **Save & Close**.
 
 ---
 
