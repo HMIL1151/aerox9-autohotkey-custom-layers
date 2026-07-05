@@ -25,8 +25,14 @@ This was built as a Windows-side software layer rather than a firmware modificat
   - editing button labels
   - editing button actions
   - editing wheel-tilt left and right actions per layer
+  - assigning per-layer auto-switch app rules by process name
   - linking thumbnail images to layers
 - Optional action picker to avoid remembering AutoHotkey key codes.
+- Built-in macro editor with line-by-line step editing and test run.
+- Context-sensitive action rules by active process.
+- Multi-trigger actions (short, double-tap, long-press) per button via action syntax.
+- Profile import/export from the editor.
+- Automatic timestamped config backups on save.
 - Support for tap actions, hold actions, text output, launching programs, and disabled buttons.
 - Config saved to an `.ini` file beside the script.
 - Designed for AutoHotkey v2.
@@ -155,8 +161,31 @@ The script now self-elevates on launch if it is not already running as administr
 3. Rename the layer using the **Layer name** field.
 4. Optionally select a thumbnail using **Browse...**.
 5. Edit the 12 display labels.
-6. Edit the 12 actions, or use **Pick...** if the action picker is included in your script version.
+6. Edit the 12 actions using each row's **Edit...** button.
 7. Select **Save** or **Save & Close**.
+
+Tip: you can click directly into an action field and press a key or key combo to auto-capture it as a `tap:` action.
+
+In the **Buttons** tab, action cells are read-only summaries (for example `CTRL+SHIFT+A`, `SHIFT (hold)`, `Save (macro)`).
+
+Use **Edit...** on a button row to configure its action.
+
+In the button action editor, action text is read-only.
+You can update it only by:
+
+- **Capture Key**
+- selecting a macro from the macro list (auto-applies)
+
+For key capture:
+
+1. Click **Capture Key**.
+2. Press the key/combo to store.
+
+In the button action editor, **Capture Key** auto-focuses the current action field.
+
+Wheel tilt left/right actions are configured from the **Buttons** tab using the same **Edit...** workflow as button actions.
+
+Wheel up/down actions are no longer exposed in the General tab.
 
 ---
 
@@ -166,7 +195,162 @@ The script now self-elevates on launch if it is not already running as administr
 2. Select the layer from the dropdown.
 3. Change the layer name, thumbnail, labels, or actions.
 4. Optionally set wheel-tilt left/right actions for the layer.
-5. Select **Save** or **Save & Close**.
+5. Optionally set wheel up/down actions (leave `none:` to keep normal scrolling).
+6. Optionally set **Auto-switch apps** (for example: `Code.exe, devenv.exe`).
+7. Select **Save** or **Save & Close**.
+
+The editor is organized into tabs to keep it usable at normal window sizes:
+
+- **General**
+- **Buttons 1-6**
+- **Buttons 7-12**
+- **Help**
+
+---
+
+## Auto Layer Switching (Process-Based)
+
+Each layer can define a list of process names in the editor field:
+
+```text
+Auto-switch apps (process names, comma-separated)
+```
+
+You can also click **Pick...** beside this field to see currently open apps and select from a checklist.
+
+When the active window process matches one of these names, the script automatically switches to that layer.
+
+Examples:
+
+```text
+Code.exe, devenv.exe
+Inventor.exe
+chrome
+```
+
+Notes:
+
+- Matching is case-insensitive.
+- You can use names with or without `.exe`.
+- Separate multiple entries with commas, semicolons, or new lines.
+
+---
+
+## Advanced Action Syntax
+
+You can still use regular actions like `tap:^c` and `hold:{Shift}`. Advanced options are:
+
+### Multi-trigger action
+
+```text
+multi:shortAction||doubleTapAction||longPressAction
+```
+
+Example:
+
+```text
+multi:tap:^c||tap:^v||tap:^x
+```
+
+### Context-sensitive action
+
+```text
+code.exe,devenv.exe=>tap:^c;;default=>tap:^v
+```
+
+Rules are checked left-to-right. `default` is optional fallback.
+
+### Macro action
+
+```text
+macro:MyMacroName
+```
+
+### Toggle action (stateful)
+
+```text
+toggle:StateName|onAction|offAction
+```
+
+Example:
+
+```text
+toggle:MicMute|tap:{Volume_Mute}|none:
+```
+
+---
+
+## Macro Editor
+
+Open the layer editor, then click **Macros...**.
+
+The macro editor is arranged in two columns:
+
+- Left: macro list and create/save/delete controls
+- Right: macro name, step editor, quick-insert buttons, test run
+
+Macro recording buttons are available in the macro editor:
+
+- **Start Rec** begins capturing key presses into macro steps.
+- **Stop Rec** ends capture.
+
+Recorded steps are added as `tap:` and `sleep:` lines.
+
+Macros are edited as one step per line, for example:
+
+```text
+tap:^c
+sleep:120
+tap:^v
+```
+
+Supported step styles include:
+
+- `tap:...`
+- `hold:...` (executed as press+release in macro playback)
+- `text:...`
+- `run:...`
+- `sleep:<milliseconds>`
+- `macro:<OtherMacro>` (nested macro)
+
+---
+
+## Profile Import/Export
+
+In the layer editor:
+
+- **Export...** writes your current config to an `.ini` profile file.
+- **Import...** replaces current settings from an exported profile file.
+
+---
+
+## Config Backups
+
+Every save creates a timestamped backup in:
+
+```text
+ConfigBackups\Aerox9Layers_YYYYMMDD-HHMMSS.ini
+```
+
+This gives a rollback path when experimenting with large mapping changes.
+
+---
+
+## Alternative Presses
+
+Use multi-trigger actions for alternative presses on the same button:
+
+```text
+multi:shortAction||doubleTapAction||longPressAction
+```
+
+Example:
+
+```text
+multi:tap:^c||tap:^v||tap:^x
+```
+
+This gives one physical button three behaviors (single, double, long press).
 
 ---
 
@@ -570,8 +754,6 @@ This keeps the setup reversible, easier to debug, and safer than attempting to d
 - Long-press CPI behaviour depends on SteelSeries GG emitting real key-down/key-up events.
 - Hold actions are designed for single keys or single mouse buttons.
 - The overlay is click-through and cannot currently be interacted with directly.
-- The tool does not currently auto-switch layers based on active application.
-- The tool does not currently include a full macro recorder unless added separately.
 - Thumbnail images are displayed in a fixed-size box and may appear squashed if not square.
 
 ---
@@ -580,15 +762,11 @@ This keeps the setup reversible, easier to debug, and safer than attempting to d
 
 Possible future additions:
 
-- Active-application layer switching.
-- Manual override per application.
-- Full macro recorder.
-- Import/export layer profiles.
 - Tray menu for opening the editor.
 - Overlay positioning options.
 - Per-layer colours.
 - Per-layer icon packs.
-- Better support for chorded hold actions.
+- Macro recorder (currently macro editor is step-based, not recorder-based).
 - Compiled `.exe` release for easier startup and sharing.
 
 ---
