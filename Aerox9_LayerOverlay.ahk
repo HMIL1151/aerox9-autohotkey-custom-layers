@@ -324,7 +324,7 @@ ShowOverlay() {
     thumbnailPath := ""
 
     try {
-        thumbnailPath := layer.Thumbnail
+        thumbnailPath := ResolveThumbnailPath(layer.Thumbnail)
     }
 
     displayThumbnail := ""
@@ -637,7 +637,7 @@ BrowseThumbnail() {
     )
 
     if selectedFile != "" {
-        ThumbnailEdit.Value := selectedFile
+        ThumbnailEdit.Value := ToStoredThumbnailPath(selectedFile)
     }
 }
 
@@ -903,7 +903,7 @@ LoadConfig() {
 
         Layers.Push({
             Name: name,
-            Thumbnail: thumbnail,
+            Thumbnail: NormalizeThumbnailFromConfig(thumbnail),
             Enabled: (enabled != "0"),
             Labels: labels,
             Actions: actions
@@ -939,10 +939,103 @@ SaveConfig() {
 
 GetSafeThumbnail(layer) {
     try {
-        return layer.Thumbnail
+        return ToStoredThumbnailPath(layer.Thumbnail)
     }
 
     return ""
+}
+
+ResolveThumbnailPath(storedPath) {
+    if storedPath = "" {
+        return ""
+    }
+
+    path := Trim(storedPath)
+
+    if !IsAbsoluteWindowsPath(path) {
+        path := TrimLeadingDotPath(path)
+        return A_ScriptDir "\" path
+    }
+
+    ; Legacy absolute path fallback: if missing on this machine, try local Thumbnails\ by filename.
+    if FileExist(path) {
+        return path
+    }
+
+    SplitPath(path, &fileName)
+
+    if fileName != "" {
+        candidate := A_ScriptDir "\Thumbnails\" fileName
+
+        if FileExist(candidate) {
+            return candidate
+        }
+
+        candidate := A_ScriptDir "\" fileName
+
+        if FileExist(candidate) {
+            return candidate
+        }
+    }
+
+    return path
+}
+
+ToStoredThumbnailPath(pathValue) {
+    if pathValue = "" {
+        return ""
+    }
+
+    original := Trim(pathValue)
+    resolved := ResolveThumbnailPath(original)
+
+    ; Keep relative values relative (for portability in repo).
+    if !IsAbsoluteWindowsPath(original) {
+        return TrimLeadingDotPath(original)
+    }
+
+    scriptPrefix := RTrim(A_ScriptDir, "\\") "\\"
+
+    if InStr(StrLower(resolved), StrLower(scriptPrefix)) = 1 {
+        return SubStr(resolved, StrLen(scriptPrefix) + 1)
+    }
+
+    ; Absolute but outside this repo: keep absolute.
+    return resolved
+}
+
+NormalizeThumbnailFromConfig(storedPath) {
+    if storedPath = "" {
+        return ""
+    }
+
+    path := Trim(storedPath)
+
+    ; Canonicalize relative paths to a stable saved form.
+    if !IsAbsoluteWindowsPath(path) {
+        return TrimLeadingDotPath(path)
+    }
+
+    ; Convert absolute paths inside this repo to relative.
+    return ToStoredThumbnailPath(path)
+}
+
+IsAbsoluteWindowsPath(pathValue) {
+    return RegExMatch(pathValue, "i)^[A-Z]:\\|^\\\\")
+}
+
+TrimLeadingDotPath(pathValue) {
+    path := StrReplace(pathValue, "/", "\\")
+
+    if SubStr(path, 1, 2) = ".\\" {
+        path := SubStr(path, 3)
+    }
+
+    while SubStr(path, 1, 1) = "\\" {
+        path := SubStr(path, 2)
+    }
+
+    return path
 }
 
 PrepareThumbnailForOverlay(sourcePath, size := 54) {
