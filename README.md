@@ -42,13 +42,34 @@ This was built as a Windows-side software layer rather than a firmware modificat
 ## Requirements
 
 - Windows 10 or Windows 11.
-- AutoHotkey v2.
+- AutoHotkey v2 (only if running the `.ahk` script directly - not needed if you install via the packaged installer, see below).
 - SteelSeries GG.
 - SteelSeries Aerox 9 mouse.
 
 ---
 
+## Installing (Colleagues / Non-Developers)
+
+If you just want to run the tool - no Git, no AutoHotkey install, no manual Startup folder setup - use the packaged installer:
+
+1. Get `Aerox9LayerManagerSetup.exe` from whoever built the latest release (see [Building a Release](#building-a-release) below for maintainers).
+2. Run it and step through the wizard.
+3. Leave **"Start Aerox 9 Layer Manager automatically when Windows starts"** checked (default) so it launches every time you sign in.
+4. Finish the wizard. The app launches automatically on completion unless you untick that option.
+5. On first launch (and every launch after), Windows will prompt for administrator approval (UAC). This is expected - the tool self-elevates for reliable input handling. Accept it.
+6. Complete the one remaining manual step: [SteelSeries GG Setup](#steelseries-gg-setup) below, mapping the mouse buttons to the key outputs the tool listens for.
+
+The installer ships with a default set of example layers and thumbnails already configured, so you can try it immediately, then customize with the editor (`Ctrl + Alt + Shift + F11`).
+
+Re-running the installer later (to upgrade to a newer build) will not overwrite your existing `Aerox9Layers.ini`, config backups, or thumbnails - only the app itself is replaced.
+
+Uninstalling (via **Settings > Apps** or the Start Menu shortcut) removes the app and its startup entry. You'll be asked whether to also delete your saved layer profile, backups, and thumbnails, or keep them in place for a future reinstall.
+
+---
+
 ## Recommended Folder Structure
+
+This section applies if you are running the `.ahk` script directly (development workflow). If you used the installer, skip this - it already places files in a stable Program Files location for you.
 
 For reliability, keep the script in a stable local folder rather than a cloud-only or temporary folder.
 
@@ -603,7 +624,9 @@ These are starting points and may need tuning depending on your Inventor navigat
 
 ## Starting Automatically with Windows
 
-The recommended method is to place a shortcut to the `.ahk` script in the Windows Startup folder.
+If you installed via `Aerox9LayerManagerSetup.exe`, this is already handled: the installer creates the Startup entry for you as long as the startup task was checked during setup (re-run the installer and adjust the task if you want to change this).
+
+If you are running the `.ahk` script directly instead, the recommended method is to place a shortcut to the `.ahk` script in the Windows Startup folder.
 
 1. Find the `.ahk` script file.
 2. Create a shortcut to it.
@@ -767,7 +790,50 @@ Possible future additions:
 - Per-layer colours.
 - Per-layer icon packs.
 - Macro recorder (currently macro editor is step-based, not recorder-based).
-- Compiled `.exe` release for easier startup and sharing.
+- Scheduled Task-based autostart (run with highest privileges) to remove the per-login UAC prompt entirely.
+
+---
+
+## Building a Release
+
+This produces `dist\Aerox9LayerManagerSetup.exe`, the single installer file colleagues need (see [Installing (Colleagues / Non-Developers)](#installing-colleagues--non-developers) above). Only maintainers need this section.
+
+### One-time tool setup
+
+Install these once on the build machine:
+
+- **AutoHotkey v2** - <https://www.autohotkey.com/>. Provides the runtime used as the compiled EXE's base file.
+- **Ahk2Exe compiler** - the AutoHotkey v2 install includes `UX\install-ahk2exe.ahk`, which downloads and installs it; or grab a release directly from <https://github.com/AutoHotkey/Ahk2Exe/releases>.
+- **Inno Setup 6** - <https://jrsoftware.org/isinfo.php> (or the GitHub releases at <https://github.com/jrsoftware/issrc/releases>). Provides `ISCC.exe`, the command-line installer compiler.
+
+`build-release.ps1` looks for these tools in the standard Program Files locations, in `%LOCALAPPDATA%\Aerox9BuildTools\...` (a convenient non-admin install target if you don't want to touch Program Files), and finally on `PATH`. If none of those match, it fails with the paths it checked.
+
+### Building
+
+From the repo root:
+
+```powershell
+.\build-release.ps1
+```
+
+Optionally pass a version number (embedded in the installer's version metadata):
+
+```powershell
+.\build-release.ps1 -Version 1.1.0
+```
+
+This will:
+
+1. Compile `Aerox9_LayerOverlay.ahk` into a standalone `Aerox9_LayerOverlay.exe` (no AutoHotkey install required on the target machine).
+2. Stage the EXE, `README.md`, the default profile (`Aerox9Layers.default.ini`), and `Thumbnails\` into `dist\stage\`.
+3. Build `dist\Aerox9LayerManagerSetup.exe` from `installer\installer.iss`.
+
+### Notes for maintainers
+
+- `Aerox9Layers.default.ini` is a curated fixture - a copy of a working profile with thumbnail paths made relative to `Thumbnails\` - shipped as the default profile for fresh installs. It is intentionally separate from your local working `Aerox9Layers.ini` (which stays in `.gitignore`-able developer/runtime state). Update `Aerox9Layers.default.ini` deliberately when you want to change what new installs start with.
+- The installer only writes `Aerox9Layers.ini` and `Thumbnails\` if they don't already exist at the target (`onlyifdoesntexist`), so upgrades never clobber a colleague's live configuration or config backups.
+- The installer requires administrator privileges to install (matching the app's own self-elevation behavior). It registers a Startup-folder shortcut rather than a Scheduled Task, so each login still shows one UAC prompt when the app self-elevates - a Scheduled Task with "highest privileges" is a possible future improvement to remove that prompt.
+- Version metadata (name, description, file version) is embedded via `;@Ahk2Exe-Set...` compiler directives near the top of `Aerox9_LayerOverlay.ahk`. Bump the version there when cutting a new release.
 
 ---
 

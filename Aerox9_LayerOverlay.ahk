@@ -20,6 +20,12 @@ EnsureAdmin()
 ; CPI hold > 1 second   -> hold current overlay on screen, no layer switch
 ; ==========================================================
 
+;@Ahk2Exe-SetName Aerox 9 Layer Manager
+;@Ahk2Exe-SetDescription Aerox 9 Layer Manager - mouse layer overlay
+;@Ahk2Exe-SetProductName Aerox 9 Layer Manager
+;@Ahk2Exe-SetVersion 1.0.0.0
+;@Ahk2Exe-SetCopyright Aerox 9 Layer Manager contributors
+
 global ConfigFile := A_ScriptDir "\Aerox9Layers.ini"
 global CurrentLayer := 1
 global Layers := []
