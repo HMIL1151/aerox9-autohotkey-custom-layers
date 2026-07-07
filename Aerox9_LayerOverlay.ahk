@@ -107,6 +107,7 @@ global OverlayY := 80                    ; distance from top edge
 global CpiLongPressMs := 250
 global AutoLayerEnabled := true
 global AutoLayerCheckMs := 450
+global AutoSwitchOverrideProcess := ""
 
 ; Windows message constants used for action capture in the editor
 global WM_KEYDOWN := 0x100
@@ -270,7 +271,7 @@ CpiUp() {
 ; ----------------------------------------------------------
 
 CycleLayer() {
-    global CurrentLayer, Layers
+    global CurrentLayer, Layers, AutoSwitchOverrideProcess
 
     Loop Layers.Length {
         CurrentLayer += 1
@@ -283,6 +284,10 @@ CycleLayer() {
             break
         }
     }
+
+    ; Manual CPI cycling should win while staying in the current app.
+    ; Auto-switch resumes after focus changes to a different process.
+    AutoSwitchOverrideProcess := GetActiveProcessName()
 
     ShowOverlay()
 }
@@ -302,7 +307,7 @@ StartAutoLayerMonitor() {
 }
 
 CheckAutoLayerSwitch() {
-    global Layers, CurrentLayer, EditorGui, LastActionText
+    global Layers, CurrentLayer, EditorGui, LastActionText, AutoSwitchOverrideProcess
 
     if IsObject(EditorGui) {
         ; If the editor object exists and still has a live hwnd, pause auto-switch.
@@ -334,6 +339,16 @@ CheckAutoLayerSwitch() {
 
     if processName = "" {
         return
+    }
+
+    ; Respect manual CPI override while the same process remains focused.
+    if AutoSwitchOverrideProcess != "" {
+        if StrLower(AutoSwitchOverrideProcess) = StrLower(processName) {
+            return
+        }
+
+        ; Focus moved to another app, so clear the temporary override.
+        AutoSwitchOverrideProcess := ""
     }
 
     targetLayer := FindLayerForProcess(processName)
