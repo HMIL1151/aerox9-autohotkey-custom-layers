@@ -1377,7 +1377,8 @@ OpenButtonActionEditor(buttonIndex, *) {
 
     ButtonActionEditGui.AddText("xm ym", "Current action:")
     ButtonActionEditGui.AddButton("xm y+4 w110", "Capture Key").OnEvent("Click", (*) => ArmActionCapture())
-    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w500 +ReadOnly", ActionValues[buttonIndex])
+    ButtonActionEditGui.AddButton("x+8 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
+    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w410 +ReadOnly", ActionValues[buttonIndex])
     RegisterCapturableActionTarget(ButtonActionRawEdit, "edit", 0)
 
     macroNames := ["(none)"]
@@ -1400,7 +1401,7 @@ OpenButtonActionEditor(buttonIndex, *) {
     ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
     ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, or Layer. Then click Save.")
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, Layer, or Disable. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
@@ -1429,7 +1430,8 @@ OpenNamedActionEditor(targetKind) {
 
     ButtonActionEditGui.AddText("xm ym", "Current action:")
     ButtonActionEditGui.AddButton("xm y+4 w110", "Capture Key").OnEvent("Click", (*) => ArmActionCapture())
-    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w500 +ReadOnly", currentAction)
+    ButtonActionEditGui.AddButton("x+8 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
+    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w410 +ReadOnly", currentAction)
     RegisterCapturableActionTarget(ButtonActionRawEdit, "edit", 0)
 
     macroNames := ["(none)"]
@@ -1452,14 +1454,14 @@ OpenNamedActionEditor(targetKind) {
     ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
     ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, or Layer. Then click Save.")
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, Layer, or Disable. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
 
     ButtonActionEditGui.OnEvent("Close", (*) => ButtonActionEditGui.Destroy())
     ButtonActionEditGui.Show("w660 h310")
-}
+}}
 
 OnButtonActionMacroChanged() {
     global ButtonActionRawEdit, ButtonActionMacroDDL
@@ -1490,6 +1492,12 @@ OnButtonActionLayerChanged() {
             ButtonActionRawEdit.Value := "none:"
         }
     }
+}
+
+DisableButtonAction() {
+    global ButtonActionRawEdit
+
+    ButtonActionRawEdit.Value := "none:"
 }
 
 SaveButtonActionEdit() {
