@@ -2223,8 +2223,22 @@ OpenMacroEditor() {
     MacroGui.AddButton("x+6 yp w110", "Test Run").OnEvent("Click", (*) => TestRunMacro())
     MacroGui.AddButton("x+6 yp w110", "Close").OnEvent("Click", (*) => MacroGui.Destroy())
 
+    ; Cheatsheet panel
+    MacroGui.AddText("x14 y482", "AHK Action Codes")
+    cheatsheetText := "Keyboard: tap:{Enter}, tap:a, tap:^c (Ctrl+C), tap:!c (Alt+C), tap:+c (Shift+C), tap:#{Tab} (Win+Tab)`n"
+    cheatsheetText .= "Mouse: tap:{MButton}, tap:{RButton}, tap:{LButton}, tap:{XButton1}, tap:{WheelUp}`n"
+    cheatsheetText .= "Hold: hold:{Shift}, hold:^c`n"
+    cheatsheetText .= "Text: text:Hello World`n"
+    cheatsheetText .= "Run: run:notepad.exe, run:C:\\path\\to\\app.exe`n"
+    cheatsheetText .= "Delay: sleep:500 (milliseconds)`n"
+    cheatsheetText .= "Macro: macro:MacroName (recursively call other macro)`n"
+    cheatsheetText .= "Navigation: {Up}, {Down}, {Left}, {Right}, {Home}, {End}, {PgUp}, {PgDn}`n"
+    cheatsheetText .= "Functions: {F1} to {F12}, {Esc}, {Tab}, {Backspace}, {Delete}, {Ins}, {Pause}`n"
+    cheatsheetText .= "Combos: ^+a (Ctrl+Shift+A), !{F4} (Alt+F4), #e (Win+E)"
+    MacroGui.AddEdit("x14 y502 w590 h120 +ReadOnly BackgroundE8E8E8 -VScroll", cheatsheetText)
+
     MacroGui.OnEvent("Close", (*) => CloseMacroGui())
-    MacroGui.Show("w630 h540")
+    MacroGui.Show("w630 h650")
     ActivateMacroGui()
     SetTimer(ActivateMacroGui, -40)
 
@@ -2281,10 +2295,20 @@ RefreshMacroListBox() {
 }
 
 NewMacroInEditor() {
-    global MacroNameEdit, MacroStepsEdit
+    global MacroNameEdit, MacroStepsEdit, MacroListBox
 
     MacroNameEdit.Value := "NewMacro"
     MacroStepsEdit.Value := "tap:^c`nsleep:120`ntap:^v"
+    
+    ; Add to list and select it to make it obvious a new macro was created
+    MacroListBox.Add(["NewMacro"])
+    MacroListBox.Value := MacroListBox.GetCount()
+    
+    ; Focus on the name edit so user can immediately rename it
+    try MacroNameEdit.Focus()
+    
+    ToolTip("New macro created - edit name and steps")
+    SetTimer(() => ToolTip(), -1200)
 }
 
 SaveMacroFromEditor() {
@@ -2294,7 +2318,7 @@ SaveMacroFromEditor() {
     steps := Trim(MacroStepsEdit.Value)
 
     if name = "" {
-        MsgBox("Macro name is required.")
+        MsgBox("Macro name is required.", "Macro Editor", 48)
         return
     }
 
@@ -2315,7 +2339,10 @@ SaveMacroFromEditor() {
 
     SaveConfig()
     RefreshMacroListBox()
-    MsgBox("Macro saved.")
+    
+    ; Use tooltip instead of MsgBox to ensure it appears on top of macro editor
+    ToolTip("✓ Macro saved")
+    SetTimer(() => ToolTip(), -1200)
 }
 
 DeleteSelectedMacro() {
@@ -3070,6 +3097,7 @@ CreateBlankLayer(name) {
 
 CloseMacroGui() {
     global MacroGui, MacroRecording, MacroRecordLastTick, ButtonActionEditGui, MacroActionEditorWasHidden
+    global ButtonActionMacroDDL
 
     MacroRecording := false
     MacroRecordLastTick := 0
@@ -3082,6 +3110,19 @@ CloseMacroGui() {
 
     if MacroActionEditorWasHidden && IsObject(ButtonActionEditGui) {
         try ButtonActionEditGui.Show()
+        
+        ; Refresh macro dropdown list in case new macros were added
+        if IsObject(ButtonActionMacroDDL) {
+            macroNames := ["(none)"]
+            for _, macroName in GetMacroNameList() {
+                macroNames.Push(macroName)
+            }
+            ButtonActionMacroDDL.Delete()
+            for _, name in macroNames {
+                ButtonActionMacroDDL.Add([name])
+            }
+        }
+        
         try WinActivate("ahk_id " ButtonActionEditGui.Hwnd)
     }
 
