@@ -2287,10 +2287,15 @@ RefreshMacroListBox() {
         return
     }
 
-    MacroListBox.Delete()
+    try {
+        MacroListBox.Delete()
 
-    for _, name in GetMacroNameList() {
-        MacroListBox.Add([name])
+        for _, name in GetMacroNameList() {
+            MacroListBox.Add([name])
+        }
+    } catch {
+        ; ListBox control is destroyed, silently return
+        return
     }
 }
 
@@ -2301,8 +2306,8 @@ NewMacroInEditor() {
     MacroStepsEdit.Value := "tap:^c`nsleep:120`ntap:^v"
     
     ; Add to list and select it to make it obvious a new macro was created
-    MacroListBox.Add(["NewMacro"])
-    MacroListBox.Value := MacroListBox.GetCount()
+    newIndex := MacroListBox.Add(["NewMacro"])
+    MacroListBox.Value := newIndex
     
     ; Focus on the name edit so user can immediately rename it
     try MacroNameEdit.Focus()
