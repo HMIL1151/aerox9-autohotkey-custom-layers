@@ -28,6 +28,7 @@ EnsureAdmin()
 
 global ConfigFile := A_ScriptDir "\Aerox9Layers.ini"
 global CurrentLayer := 1
+global EditorLayerIndex := 1
 global Layers := []
 global ButtonPressed := Map()
 global ButtonDownTick := Map()
@@ -291,6 +292,10 @@ CycleLayer() {
     ; Auto-switch resumes after focus changes to a different process.
     AutoSwitchOverrideProcess := GetActiveProcessName()
 
+    ; Clear stale action text so CPI overlay doesn't look like a fresh button press.
+    global LastActionText
+    LastActionText := ""
+
     ShowOverlay()
 }
 
@@ -548,7 +553,12 @@ SwitchToLayer(layerInput) {
     }
 
     CurrentLayer := layerIndex
-    LastActionText := "Switch to: " Layers[layerIndex].Name
+
+    if Layers[layerIndex].Enabled {
+        LastActionText := "Switch to: " Layers[layerIndex].Name
+    } else {
+        LastActionText := "Switch to: " Layers[layerIndex].Name " (excluded from CPI cycle)"
+    }
     
     ; Prevent auto-switch from overriding manual layer switch temporarily
     activeHwnd := WinExist("A")
@@ -1085,7 +1095,7 @@ OpenEditor() {
     global TiltLeftActionValue, TiltRightActionValue, WheelUpActionValue, WheelDownActionValue
     global TiltLeftActionDisplayEdit, TiltRightActionDisplayEdit
     global CapturableActionTargetMap, ActionCaptureArmed, ActionCaptureTargetHwnd
-    global Layers, CurrentLayer
+    global Layers, CurrentLayer, EditorLayerIndex
 
     if IsObject(EditorGui) {
         try EditorGui.Destroy()
@@ -1098,14 +1108,16 @@ OpenEditor() {
     ActionCaptureArmed := false
     ActionCaptureTargetHwnd := 0
 
+    EditorLayerIndex := CurrentLayer
+
     Loop 12 {
-        ActionValues.Push(Layers[CurrentLayer].Actions[A_Index])
+        ActionValues.Push(Layers[EditorLayerIndex].Actions[A_Index])
     }
 
-    TiltLeftActionValue := Layers[CurrentLayer].TiltLeftAction
-    TiltRightActionValue := Layers[CurrentLayer].TiltRightAction
-    WheelUpActionValue := Layers[CurrentLayer].WheelUpAction
-    WheelDownActionValue := Layers[CurrentLayer].WheelDownAction
+    TiltLeftActionValue := Layers[EditorLayerIndex].TiltLeftAction
+    TiltRightActionValue := Layers[EditorLayerIndex].TiltRightAction
+    WheelUpActionValue := Layers[EditorLayerIndex].WheelUpAction
+    WheelDownActionValue := Layers[EditorLayerIndex].WheelDownAction
 
     EditorGui := Gui("+Resize", "Aerox 9 Layer Manager")
     EditorGui.SetFont("s10", "Segoe UI")
@@ -1115,7 +1127,7 @@ OpenEditor() {
     EditorGui.AddText("xm ym+2", "Layer:")
 
     LayerDropDown := EditorGui.Add("DropDownList", "x+8 yp-3 w260", GetLayerNames())
-    LayerDropDown.Value := CurrentLayer
+    LayerDropDown.Value := EditorLayerIndex
     LayerDropDown.OnEvent("Change", (*) => SelectLayerFromEditor())
 
     EditorGui.AddButton("x+8 yp-1 w88", "Add Layer").OnEvent("Click", (*) => AddLayerFromEditor())
@@ -1126,18 +1138,18 @@ OpenEditor() {
     tabs.UseTab(1)
 
     EditorGui.AddText("x34 y104", "Layer name:")
-    NameEdit := EditorGui.AddEdit("x150 y100 w340", Layers[CurrentLayer].Name)
+    NameEdit := EditorGui.AddEdit("x150 y100 w340", Layers[EditorLayerIndex].Name)
 
     EnabledCheck := EditorGui.AddCheckbox("x34 y136 w360", "Layer enabled (active in CPI cycle)")
-    EnabledCheck.Value := Layers[CurrentLayer].Enabled ? 1 : 0
+    EnabledCheck.Value := Layers[EditorLayerIndex].Enabled ? 1 : 0
 
     EditorGui.AddText("x34 y170", "Thumbnail:")
-    ThumbnailEdit := EditorGui.AddEdit("x150 y166 w440 r1", GetLayerThumbnail(CurrentLayer))
+    ThumbnailEdit := EditorGui.AddEdit("x150 y166 w440 r1", GetLayerThumbnail(EditorLayerIndex))
     EditorGui.AddButton("x602 y164 w78", "Browse...").OnEvent("Click", (*) => BrowseThumbnail())
     EditorGui.AddButton("x686 y164 w60", "Clear").OnEvent("Click", (*) => ClearThumbnail())
 
     EditorGui.AddText("x34 y208", "Auto-switch apps:")
-    AutoSwitchAppsEdit := EditorGui.AddEdit("x150 y204 w520 r3", GetLayerAutoSwitchApps(CurrentLayer))
+    AutoSwitchAppsEdit := EditorGui.AddEdit("x150 y204 w520 r3", GetLayerAutoSwitchApps(EditorLayerIndex))
     EditorGui.AddButton("x680 y202 w66", "Pick...").OnEvent("Click", (*) => OpenAutoSwitchAppPicker())
 
     tabs.UseTab(2)
@@ -1173,7 +1185,7 @@ OpenEditor() {
         y := 158 + ((row - 1) * 52)
 
         EditorGui.AddText("x" xBtn " y" y " w28", idx)
-        labelEdit := EditorGui.AddEdit("x" xLabel " y" (y - 4) " w145", Layers[CurrentLayer].Labels[idx])
+        labelEdit := EditorGui.AddEdit("x" xLabel " y" (y - 4) " w145", Layers[EditorLayerIndex].Labels[idx])
         actionDisplay := EditorGui.AddEdit("x" xAction " y" (y - 4) " w180 +ReadOnly +Disabled BackgroundE8E8E8", ActionToDisplayText(ActionValues[idx]))
         editButton := EditorGui.AddButton("x" xPick " y" (y - 5) " w60", "Edit...")
         editButton.OnEvent("Click", OpenButtonActionEditor.Bind(idx))
@@ -1218,35 +1230,43 @@ OpenEditor() {
 }
 
 SelectLayerFromEditor() {
-    global CurrentLayer, LayerDropDown
+    global CurrentLayer, EditorLayerIndex, LayerDropDown
 
     SaveFromEditor(false)
-    CurrentLayer := LayerDropDown.Value
+    EditorLayerIndex := LayerDropDown.Value
+    CurrentLayer := EditorLayerIndex
     OpenEditor()
     ShowOverlay()
 }
 
 SaveFromEditor(showMessage := true) {
-    global Layers, CurrentLayer, NameEdit, ThumbnailEdit, EnabledCheck, AutoSwitchAppsEdit, LabelEdits, ActionValues
+    global Layers, CurrentLayer, EditorLayerIndex, NameEdit, ThumbnailEdit, EnabledCheck, AutoSwitchAppsEdit, LabelEdits, ActionValues
     global TiltLeftActionValue, TiltRightActionValue, WheelUpActionValue, WheelDownActionValue
 
     if !IsObject(NameEdit) {
         return
     }
 
-    Layers[CurrentLayer].Name := NameEdit.Value
-    Layers[CurrentLayer].Enabled := EnabledCheck.Value = 1
-    Layers[CurrentLayer].Thumbnail := ThumbnailEdit.Value
-    Layers[CurrentLayer].TiltLeftAction := TiltLeftActionValue
-    Layers[CurrentLayer].TiltRightAction := TiltRightActionValue
-    Layers[CurrentLayer].WheelUpAction := WheelUpActionValue
-    Layers[CurrentLayer].WheelDownAction := WheelDownActionValue
-    Layers[CurrentLayer].AutoSwitchApps := AutoSwitchAppsEdit.Value
+    if EditorLayerIndex < 1 || EditorLayerIndex > Layers.Length {
+        return
+    }
+
+    Layers[EditorLayerIndex].Name := NameEdit.Value
+    Layers[EditorLayerIndex].Enabled := EnabledCheck.Value = 1
+    Layers[EditorLayerIndex].Thumbnail := ThumbnailEdit.Value
+    Layers[EditorLayerIndex].TiltLeftAction := TiltLeftActionValue
+    Layers[EditorLayerIndex].TiltRightAction := TiltRightActionValue
+    Layers[EditorLayerIndex].WheelUpAction := WheelUpActionValue
+    Layers[EditorLayerIndex].WheelDownAction := WheelDownActionValue
+    Layers[EditorLayerIndex].AutoSwitchApps := AutoSwitchAppsEdit.Value
 
     Loop 12 {
-        Layers[CurrentLayer].Labels[A_Index] := LabelEdits[A_Index].Value
-        Layers[CurrentLayer].Actions[A_Index] := ActionValues[A_Index]
+        Layers[EditorLayerIndex].Labels[A_Index] := LabelEdits[A_Index].Value
+        Layers[EditorLayerIndex].Actions[A_Index] := ActionValues[A_Index]
     }
+
+    ; Keep runtime layer aligned with the layer currently edited/saved.
+    CurrentLayer := EditorLayerIndex
 
     SaveConfig()
 
@@ -1816,13 +1836,14 @@ ImportProfileConfig() {
 }
 
 AddLayerFromEditor() {
-    global Layers, CurrentLayer
+    global Layers, CurrentLayer, EditorLayerIndex
 
     SaveFromEditor(false)
 
     newIndex := Layers.Length + 1
     Layers.Push(CreateBlankLayer("New Layer " newIndex))
     CurrentLayer := newIndex
+    EditorLayerIndex := newIndex
 
     SaveConfig()
     OpenEditor()
@@ -1830,7 +1851,7 @@ AddLayerFromEditor() {
 }
 
 DeleteLayerFromEditor() {
-    global Layers, CurrentLayer
+    global Layers, CurrentLayer, EditorLayerIndex
 
     if Layers.Length <= 1 {
         MsgBox("You need at least one layer.")
@@ -1843,11 +1864,13 @@ DeleteLayerFromEditor() {
         return
     }
 
-    Layers.RemoveAt(CurrentLayer)
+    Layers.RemoveAt(EditorLayerIndex)
 
-    if CurrentLayer > Layers.Length {
-        CurrentLayer := Layers.Length
+    if EditorLayerIndex > Layers.Length {
+        EditorLayerIndex := Layers.Length
     }
+
+    CurrentLayer := EditorLayerIndex
 
     SaveConfig()
     OpenEditor()
@@ -1855,13 +1878,19 @@ DeleteLayerFromEditor() {
 }
 
 ReloadEditor() {
-    global CurrentLayer, Layers
+    global CurrentLayer, EditorLayerIndex, Layers
 
     LoadConfig()
 
-    if CurrentLayer > Layers.Length {
-        CurrentLayer := 1
+    if EditorLayerIndex < 1 || EditorLayerIndex > Layers.Length {
+        EditorLayerIndex := CurrentLayer
     }
+
+    if EditorLayerIndex > Layers.Length {
+        EditorLayerIndex := 1
+    }
+
+    CurrentLayer := EditorLayerIndex
 
     OpenEditor()
     ShowOverlay()
