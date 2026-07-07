@@ -90,6 +90,7 @@ global ButtonActionEditIndex := 0
 global ButtonActionEditTargetKind := "button"
 global ButtonActionRawEdit := ""
 global ButtonActionMacroDDL := ""
+global ButtonActionLayerDDL := ""
 
 global ThumbnailCacheDir := A_ScriptDir "\ThumbnailCache"
 global OverlayBackColour := "202020"
@@ -536,6 +537,29 @@ GetEffectiveLayerObject() {
     return Layers[GetEffectiveLayerIndex()]
 }
 
+SwitchToLayer(layerInput) {
+    global Layers, CurrentLayer, LastActionText, AutoSwitchOverrideProcess
+
+    layerIndex := Integer(Trim(layerInput))
+
+    if layerIndex < 1 || layerIndex > Layers.Length {
+        return
+    }
+
+    CurrentLayer := layerIndex
+    LastActionText := "Switch to: " Layers[layerIndex].Name
+    
+    ; Prevent auto-switch from overriding manual layer switch temporarily
+    activeHwnd := WinExist("A")
+    if activeHwnd {
+        try {
+            AutoSwitchOverrideProcess := WinGetProcessName("ahk_id " activeHwnd)
+        }
+    }
+    
+    ShowOverlay()
+}
+
 TryTriggerLongAction(buttonNumber, expectedTick) {
     global ButtonPressed, ButtonDownTick, ButtonActionCtx
 
@@ -685,6 +709,8 @@ ExecuteActionDown(action) {
             DllCall("LockWorkStation")
             LastActionText := "Lock workstation"
 
+        case "layer":
+            SwitchToLayer(value)
 
         case "none":
             return
@@ -1272,6 +1298,17 @@ ActionToDisplayText(action) {
         case "macro":
             return value " (macro)"
 
+        case "layer":
+            layerIndex := Integer(value)
+            global Layers
+            if layerIndex >= 1 && layerIndex <= Layers.Length {
+                return "Switch to " Layers[layerIndex].Name
+            }
+            return "Layer " value
+
+        case "lock":
+            return "Lock workstation"
+
         case "multi":
             return "Single/Double/Long"
 
@@ -1322,8 +1359,8 @@ HumanizeTapToken(token) {
 }
 
 OpenButtonActionEditor(buttonIndex, *) {
-    global ButtonActionEditGui, ButtonActionEditIndex, ButtonActionEditTargetKind, ButtonActionRawEdit, ButtonActionMacroDDL
-    global ActionValues
+    global ButtonActionEditGui, ButtonActionEditIndex, ButtonActionEditTargetKind, ButtonActionRawEdit, ButtonActionMacroDDL, ButtonActionLayerDDL
+    global ActionValues, Layers
 
     ButtonActionEditTargetKind := "button"
 
@@ -1354,18 +1391,27 @@ OpenButtonActionEditor(buttonIndex, *) {
     ButtonActionMacroDDL.OnEvent("Change", (*) => OnButtonActionMacroChanged())
     ButtonActionEditGui.AddButton("x+10 yp-1 w130", "Open Macro Editor").OnEvent("Click", (*) => RequestOpenMacroEditor())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Only two edit paths are allowed: Capture Key, or choose a macro. Then click Save.")
+    layerNames := ["(none)"]
+    for i, layer in Layers {
+        layerNames.Push(i ": " layer.Name)
+    }
+
+    ButtonActionEditGui.AddText("xm y+12", "Select layer (auto-apply):")
+    ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
+    ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
+
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, or Layer. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
 
     ButtonActionEditGui.OnEvent("Close", (*) => ButtonActionEditGui.Destroy())
-    ButtonActionEditGui.Show("w660 h220")
+    ButtonActionEditGui.Show("w660 h310")
 }
 
 OpenNamedActionEditor(targetKind) {
-    global ButtonActionEditGui, ButtonActionEditIndex, ButtonActionEditTargetKind, ButtonActionRawEdit, ButtonActionMacroDDL
-    global TiltLeftActionValue, TiltRightActionValue
+    global ButtonActionEditGui, ButtonActionEditIndex, ButtonActionEditTargetKind, ButtonActionRawEdit, ButtonActionMacroDDL, ButtonActionLayerDDL
+    global TiltLeftActionValue, TiltRightActionValue, Layers
 
     ButtonActionEditIndex := 0
     ButtonActionEditTargetKind := targetKind
@@ -1397,13 +1443,22 @@ OpenNamedActionEditor(targetKind) {
     ButtonActionMacroDDL.OnEvent("Change", (*) => OnButtonActionMacroChanged())
     ButtonActionEditGui.AddButton("x+10 yp-1 w130", "Open Macro Editor").OnEvent("Click", (*) => RequestOpenMacroEditor())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Only two edit paths are allowed: Capture Key, or choose a macro. Then click Save.")
+    layerNames := ["(none)"]
+    for i, layer in Layers {
+        layerNames.Push(i ": " layer.Name)
+    }
+
+    ButtonActionEditGui.AddText("xm y+12", "Select layer (auto-apply):")
+    ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
+    ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
+
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, or Layer. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
 
     ButtonActionEditGui.OnEvent("Close", (*) => ButtonActionEditGui.Destroy())
-    ButtonActionEditGui.Show("w660 h220")
+    ButtonActionEditGui.Show("w660 h310")
 }
 
 OnButtonActionMacroChanged() {
@@ -1415,6 +1470,25 @@ OnButtonActionMacroChanged() {
         ButtonActionRawEdit.Value := "none:"
     } else {
         ButtonActionRawEdit.Value := "macro:" name
+    }
+}
+
+OnButtonActionLayerChanged() {
+    global ButtonActionRawEdit, ButtonActionLayerDDL
+
+    text := Trim(ButtonActionLayerDDL.Text)
+
+    if text = "" || text = "(none)" {
+        ButtonActionRawEdit.Value := "none:"
+    } else {
+        ; Extract the layer number from "1: Layer Name" format
+        colonPos := InStr(text, ":")
+        if colonPos > 0 {
+            layerNum := Trim(SubStr(text, 1, colonPos - 1))
+            ButtonActionRawEdit.Value := "layer:" layerNum
+        } else {
+            ButtonActionRawEdit.Value := "none:"
+        }
     }
 }
 
