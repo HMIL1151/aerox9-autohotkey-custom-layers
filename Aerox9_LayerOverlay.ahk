@@ -1461,7 +1461,7 @@ OpenNamedActionEditor(targetKind) {
 
     ButtonActionEditGui.OnEvent("Close", (*) => ButtonActionEditGui.Destroy())
     ButtonActionEditGui.Show("w660 h310")
-}}
+}
 
 OnButtonActionMacroChanged() {
     global ButtonActionRawEdit, ButtonActionMacroDDL
