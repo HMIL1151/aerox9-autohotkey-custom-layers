@@ -59,6 +59,7 @@ global TiltRightActionDisplayEdit := ""
 global CapturableActionTargetMap := Map()
 global ActionCaptureArmed := false
 global ActionCaptureTargetHwnd := 0
+global ActionCaptureMode := "tap"
 
 global CpiIsDown := false
 global CpiDownTick := 0
@@ -1376,9 +1377,10 @@ OpenButtonActionEditor(buttonIndex, *) {
     ButtonActionEditGui.MarginY := 12
 
     ButtonActionEditGui.AddText("xm ym", "Current action:")
-    ButtonActionEditGui.AddButton("xm y+4 w110", "Capture Key").OnEvent("Click", (*) => ArmActionCapture())
-    ButtonActionEditGui.AddButton("x+8 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
-    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w410 +ReadOnly", ActionValues[buttonIndex])
+    ButtonActionEditGui.AddButton("xm y+4 w105", "Capture Tap").OnEvent("Click", (*) => ArmActionCapture("tap"))
+    ButtonActionEditGui.AddButton("x+6 yp w110", "Capture Hold").OnEvent("Click", (*) => ArmActionCapture("hold"))
+    ButtonActionEditGui.AddButton("x+6 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
+    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+6 yp-1 w330 +ReadOnly", ActionValues[buttonIndex])
     RegisterCapturableActionTarget(ButtonActionRawEdit, "edit", 0)
 
     macroNames := ["(none)"]
@@ -1401,7 +1403,7 @@ OpenButtonActionEditor(buttonIndex, *) {
     ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
     ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, Layer, or Disable. Then click Save.")
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Tap/Hold, Macro, Layer, or Disable. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
@@ -1429,9 +1431,10 @@ OpenNamedActionEditor(targetKind) {
     currentAction := targetKind = "tilt-left" ? TiltLeftActionValue : TiltRightActionValue
 
     ButtonActionEditGui.AddText("xm ym", "Current action:")
-    ButtonActionEditGui.AddButton("xm y+4 w110", "Capture Key").OnEvent("Click", (*) => ArmActionCapture())
-    ButtonActionEditGui.AddButton("x+8 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
-    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+8 yp-1 w410 +ReadOnly", currentAction)
+    ButtonActionEditGui.AddButton("xm y+4 w105", "Capture Tap").OnEvent("Click", (*) => ArmActionCapture("tap"))
+    ButtonActionEditGui.AddButton("x+6 yp w110", "Capture Hold").OnEvent("Click", (*) => ArmActionCapture("hold"))
+    ButtonActionEditGui.AddButton("x+6 yp w70", "Disable").OnEvent("Click", (*) => DisableButtonAction())
+    ButtonActionRawEdit := ButtonActionEditGui.AddEdit("x+6 yp-1 w330 +ReadOnly", currentAction)
     RegisterCapturableActionTarget(ButtonActionRawEdit, "edit", 0)
 
     macroNames := ["(none)"]
@@ -1454,7 +1457,7 @@ OpenNamedActionEditor(targetKind) {
     ButtonActionLayerDDL := ButtonActionEditGui.AddDropDownList("xm y+4 w320", layerNames)
     ButtonActionLayerDDL.OnEvent("Change", (*) => OnButtonActionLayerChanged())
 
-    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Key, Macro, Layer, or Disable. Then click Save.")
+    ButtonActionEditGui.AddText("xm y+12 w620 c777777", "Choose one: Capture Tap/Hold, Macro, Layer, or Disable. Then click Save.")
 
     ButtonActionEditGui.AddButton("xm y+14 w90", "Save").OnEvent("Click", (*) => SaveButtonActionEdit())
     ButtonActionEditGui.AddButton("x+8 yp w90", "Cancel").OnEvent("Click", (*) => ButtonActionEditGui.Destroy())
@@ -1566,9 +1569,11 @@ CapturableActionEditFocused(editControl, *) {
     }
 }
 
-ArmActionCapture() {
-    global ActionCaptureArmed, ActionCaptureTargetHwnd
+ArmActionCapture(mode := "tap") {
+    global ActionCaptureArmed, ActionCaptureTargetHwnd, ActionCaptureMode
     global ButtonActionEditGui, ButtonActionRawEdit, CapturableActionTargetMap
+
+    ActionCaptureMode := mode
 
     targetHwnd := 0
 
@@ -1598,7 +1603,7 @@ ArmActionCapture() {
     }
 
     ActionCaptureArmed := true
-    ToolTip("Capture armed: press key/combo")
+    ToolTip("Capture armed " (mode = "hold" ? "(hold)" : "(tap)") ": press key/combo")
     SetTimer(() => ToolTip(), -1200)
 }
 
@@ -1611,7 +1616,7 @@ HandleEditorKeyCapture(wParam, lParam, msg, hwnd) {
     if MacroRecording && IsObject(MacroGui) {
         try {
             if WinActive("ahk_id " MacroGui.Hwnd) {
-                action := BuildCapturedTapAction(wParam)
+                action := BuildCapturedAction(wParam)
 
                 if action != "" {
                     nowTick := A_TickCount
@@ -1653,9 +1658,11 @@ HandleEditorKeyCapture(wParam, lParam, msg, hwnd) {
     focusedHwnd := DllCall("GetFocus", "ptr")
 
     if !focusedHwnd || !CapturableActionTargetMap.Has(focusedHwnd) {
-        ; Capture was armed, but focus is not in a capturable field.
-        ; Swallow the key to avoid system ding and keep capture armed.
-        return 0
+        ; Focus moved away from capture fields (for example into Macro Editor),
+        ; so cancel pending capture and allow normal typing.
+        ActionCaptureArmed := false
+        ActionCaptureTargetHwnd := 0
+        return
     }
 
     target := CapturableActionTargetMap[focusedHwnd]
@@ -1664,7 +1671,7 @@ HandleEditorKeyCapture(wParam, lParam, msg, hwnd) {
         ActionCaptureTargetHwnd := focusedHwnd
     }
 
-    action := BuildCapturedTapAction(wParam)
+    action := BuildCapturedAction(wParam)
 
     if action = "" {
         ; Ignore modifier-only presses without producing noise.
@@ -1688,40 +1695,51 @@ HandleEditorKeyCapture(wParam, lParam, msg, hwnd) {
     return 0
 }
 
-BuildCapturedTapAction(vkCode) {
+BuildCapturedAction(vkCode) {
+    global ActionCaptureMode
     keyName := GetKeyName(Format("vk{:X}", vkCode))
 
     if keyName = "" {
         return
     }
 
-    ; Normalize keys that often arrive as left/right variants.
+    ; Normalize left/right variants to canonical names.
     if keyName = "LControl" || keyName = "RControl" {
         keyName := "Control"
     } else if keyName = "LShift" || keyName = "RShift" {
         keyName := "Shift"
     } else if keyName = "LAlt" || keyName = "RAlt" {
         keyName := "Alt"
+    } else if keyName = "LWin" || keyName = "RWin" {
+        keyName := "LWin"
     }
 
-    ; Ignore standalone modifier keys.
-    if keyName = "Shift" || keyName = "Control" || keyName = "Alt" || keyName = "LWin" || keyName = "RWin" {
+    isModifier := (keyName = "Shift" || keyName = "Control" || keyName = "Alt" || keyName = "LWin")
+
+    ; In tap mode, standalone modifier presses are ignored — they appear as prefixes on the
+    ; actual key instead (e.g. pressing Ctrl+C gives tap:^c, not tap:{Control}).
+    ; In hold mode, modifier keys are valid targets (e.g. hold:{Shift}).
+    if isModifier && ActionCaptureMode != "hold" {
         return ""
     }
 
+    ; When the modifier key itself is being captured (hold mode), don't also add it as a
+    ; prefix — that would produce nonsense like hold:+{Shift}.
     prefix := ""
 
-    if GetKeyState("Ctrl", "P") {
-        prefix .= "^"
-    }
-    if GetKeyState("Alt", "P") {
-        prefix .= "!"
-    }
-    if GetKeyState("Shift", "P") {
-        prefix .= "+"
-    }
-    if GetKeyState("LWin", "P") || GetKeyState("RWin", "P") {
-        prefix .= "#"
+    if !isModifier {
+        if GetKeyState("Ctrl", "P") {
+            prefix .= "^"
+        }
+        if GetKeyState("Alt", "P") {
+            prefix .= "!"
+        }
+        if GetKeyState("Shift", "P") {
+            prefix .= "+"
+        }
+        if GetKeyState("LWin", "P") || GetKeyState("RWin", "P") {
+            prefix .= "#"
+        }
     }
 
     keyToken := KeyNameToActionToken(keyName)
@@ -1730,7 +1748,8 @@ BuildCapturedTapAction(vkCode) {
         return ""
     }
 
-    return "tap:" prefix keyToken
+    actionType := (ActionCaptureMode = "hold") ? "hold:" : "tap:"
+    return actionType prefix keyToken
 }
 
 KeyNameToActionToken(keyName) {
@@ -2176,6 +2195,7 @@ GetMacroNameList() {
 
 OpenMacroEditor() {
     global MacroGui, MacroListBox, MacroNameEdit, MacroStepsEdit, MacroRecording, MacroRecordLastTick, ButtonActionEditGui, MacroActionEditorWasHidden
+    global ActionCaptureArmed, ActionCaptureTargetHwnd, ActionCaptureMode
 
     macroNames := GetMacroNameList()
 
@@ -2186,6 +2206,11 @@ OpenMacroEditor() {
     MacroRecording := false
     MacroRecordLastTick := 0
     MacroActionEditorWasHidden := false
+
+    ; Cancel pending action capture so regular typing works in Macro Editor.
+    ActionCaptureArmed := false
+    ActionCaptureTargetHwnd := 0
+    ActionCaptureMode := "tap"
 
     MacroGui := Gui("+Resize +AlwaysOnTop", "Aerox 9 Macro Editor")
     if IsObject(ButtonActionEditGui) {
